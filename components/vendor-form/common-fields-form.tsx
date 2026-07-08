@@ -1,0 +1,257 @@
+'use client';
+
+// 공통 필드 폼 (기획서 5절)
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { CATEGORIES } from '@/lib/constants';
+import { SIDO_LIST, gugunsOf } from '@/lib/regions';
+import { AddressSearchButton } from './address-search';
+import { EMPTY_OPTION, EMPTY_PRODUCT, type VendorFormState } from './form-state';
+import { NativeSelect } from './native-select';
+import { TagInput } from './tag-input';
+import { TimeRangeSelect } from './time-select';
+
+interface CommonFieldsFormProps {
+  state: VendorFormState;
+  patch: (partial: Partial<VendorFormState>) => void;
+  isEdit: boolean;
+}
+
+function Field({ label, required, children, hint }: { label: string; required?: boolean; hint?: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-sm font-medium">
+        {label}
+        {required && <span className="ml-0.5 text-destructive">*</span>}
+      </Label>
+      {children}
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}
+
+export function CommonFieldsForm({ state, patch, isEdit }: CommonFieldsFormProps) {
+  const guguns = gugunsOf(state.regionSido);
+
+  return (
+    <div className="space-y-5">
+      <Field label="업체명" required>
+        <Input value={state.name} onChange={(e) => patch({ name: e.target.value })} placeholder="업체명" />
+      </Field>
+
+      <Field
+        label="카테고리"
+        required
+        hint={isEdit ? '카테고리를 바꾸면 업종별 정보 탭의 입력 항목이 바뀝니다.' : undefined}
+      >
+        <NativeSelect
+          value={state.category}
+          onChange={(e) => patch({ category: e.target.value as VendorFormState['category'] })}
+          placeholder="카테고리 선택"
+          options={CATEGORIES.map((c) => ({ value: c.code, label: c.label }))}
+          className="w-56"
+        />
+      </Field>
+
+      <Field label="업체연락처" required>
+        <Input
+          type="tel"
+          value={state.contact}
+          onChange={(e) => patch({ contact: e.target.value })}
+          placeholder="예: 02-1234-5678"
+          className="w-64"
+        />
+      </Field>
+
+      <Field label="운영시간" required>
+        <TimeRangeSelect
+          start={state.businessHoursStart}
+          end={state.businessHoursEnd}
+          onChange={(start, end) => patch({ businessHoursStart: start, businessHoursEnd: end })}
+        />
+      </Field>
+
+      <Field label="지역" required hint="리스트 필터/검색용 지역입니다.">
+        <div className="flex items-center gap-2">
+          <NativeSelect
+            value={state.regionSido}
+            onChange={(e) => patch({ regionSido: e.target.value, regionGugun: '' })}
+            placeholder="시/도"
+            options={SIDO_LIST.map((s) => ({ value: s, label: s }))}
+            className="w-44"
+          />
+          <NativeSelect
+            value={state.regionGugun}
+            onChange={(e) => patch({ regionGugun: e.target.value })}
+            placeholder={guguns.length === 0 ? '해당 없음' : '구/군'}
+            options={guguns.map((g) => ({ value: g, label: g }))}
+            disabled={!state.regionSido || guguns.length === 0}
+            className="w-40"
+          />
+        </div>
+      </Field>
+
+      <Field label="주소" required>
+        <div className="flex items-center gap-2">
+          <Input
+            value={state.address}
+            onChange={(e) => patch({ address: e.target.value })}
+            placeholder="주소 검색 버튼을 누르거나 직접 입력"
+            className="flex-1"
+          />
+          <AddressSearchButton
+            onSelect={({ address, sido, sigungu }) => {
+              const nextPatch: Partial<VendorFormState> = { address };
+              // 검색 결과로 지역 셀렉트 자동 채움 (매칭될 때만)
+              if (SIDO_LIST.includes(sido)) {
+                nextPatch.regionSido = sido;
+                const gugunList = gugunsOf(sido);
+                const matched = gugunList.find((g) => sigungu === g || sigungu.startsWith(g));
+                nextPatch.regionGugun = matched ?? '';
+              }
+              patch(nextPatch);
+            }}
+          />
+        </div>
+      </Field>
+
+      <Field label="상품구성" required hint="상품명 + 설명을 +/− 버튼으로 여러 개 등록할 수 있습니다.">
+        <div className="space-y-2">
+          {state.products.map((product, i) => (
+            <div key={i} className="flex flex-wrap items-center gap-2 rounded-md border bg-neutral-50/50 p-2">
+              <Input
+                value={product.name}
+                onChange={(e) => {
+                  const next = [...state.products];
+                  next[i] = { ...next[i], name: e.target.value };
+                  patch({ products: next });
+                }}
+                placeholder="상품명"
+                className="w-56"
+              />
+              <Input
+                value={product.description}
+                onChange={(e) => {
+                  const next = [...state.products];
+                  next[i] = { ...next[i], description: e.target.value };
+                  patch({ products: next });
+                }}
+                placeholder="설명"
+                className="min-w-40 flex-1"
+              />
+              <div className="ml-auto flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => patch({ products: state.products.filter((_, idx) => idx !== i) })}
+                  disabled={state.products.length === 1}
+                  title="삭제"
+                >
+                  −
+                </Button>
+                {i === state.products.length - 1 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => patch({ products: [...state.products, { ...EMPTY_PRODUCT }] })}
+                    title="상품 추가"
+                  >
+                    ＋
+                  </Button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Field>
+
+      <Field label="스타일/무드" hint="자유 입력 해시태그입니다. 엔터로 추가, 칩 클릭으로 삭제됩니다.">
+        <TagInput value={state.styleMoods} onChange={(styleMoods) => patch({ styleMoods })} />
+      </Field>
+
+      <Field label="추가옵션" hint="옵션명 + 가격(+설명)을 여러 개 등록할 수 있습니다.">
+        <div className="space-y-2">
+          {state.options.map((option, i) => (
+            <div key={i} className="flex flex-wrap items-center gap-2 rounded-md border bg-neutral-50/50 p-2">
+              <Input
+                value={option.name}
+                onChange={(e) => {
+                  const next = [...state.options];
+                  next[i] = { ...next[i], name: e.target.value };
+                  patch({ options: next });
+                }}
+                placeholder="옵션명"
+                className="w-48"
+              />
+              <div className="flex items-center gap-1">
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  value={option.price}
+                  onChange={(e) => {
+                    const next = [...state.options];
+                    next[i] = { ...next[i], price: e.target.value };
+                    patch({ options: next });
+                  }}
+                  placeholder="가격"
+                  className="w-32"
+                />
+                <span className="text-xs text-muted-foreground">원</span>
+              </div>
+              <Input
+                value={option.desc}
+                onChange={(e) => {
+                  const next = [...state.options];
+                  next[i] = { ...next[i], desc: e.target.value };
+                  patch({ options: next });
+                }}
+                placeholder="설명 (선택)"
+                className="min-w-32 flex-1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="ml-auto"
+                onClick={() => patch({ options: state.options.filter((_, idx) => idx !== i) })}
+                title="삭제"
+              >
+                −
+              </Button>
+            </div>
+          ))}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => patch({ options: [...state.options, { ...EMPTY_OPTION }] })}
+          >
+            ＋ 옵션 추가
+          </Button>
+        </div>
+      </Field>
+
+      <Field label="업체설명" required>
+        <Textarea
+          value={state.description}
+          onChange={(e) => patch({ description: e.target.value })}
+          placeholder="업체 상세 설명"
+          rows={6}
+        />
+      </Field>
+
+      <Field label="스딩 전용 혜택">
+        <Textarea
+          value={state.sdingBenefit}
+          onChange={(e) => patch({ sdingBenefit: e.target.value })}
+          placeholder="스딩 회원 전용 혜택 (선택)"
+          rows={3}
+        />
+      </Field>
+    </div>
+  );
+}

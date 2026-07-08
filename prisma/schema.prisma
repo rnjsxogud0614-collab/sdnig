@@ -1,0 +1,31 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Vendor {
+  id                 Int      @id @default(autoincrement())
+  category           String // wedding_hall, studio, dress ... (기획서 3절 14종 고정값)
+  name               String
+  contact            String? // 업체연락처
+  businessHoursStart String? // "10:00"
+  businessHoursEnd   String? // "19:00"
+  region             String?
+  address            String?
+  products           Json? // [{ name, description }] — 상품구성, +/- 로 여러 개 등록
+  description        String?  @db.Text
+  styleMoods         String[] // 자유 입력 해시태그 (기획서 8절, 고정 목록 아님)
+  options            Json? // [{ name, price, desc }]
+  sdingBenefit       String?  @db.Text
+  categoryData       Json? // 업종별 전용 필드 (기획서 6절)
+  photos             Json? // [{ url, type: "main"|"gallery"|"dress", label, sortOrder }]
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@map("vendors")
+}
