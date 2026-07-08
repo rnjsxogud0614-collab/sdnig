@@ -41,24 +41,37 @@ export default async function VendorsPage({
   const sort: VendorSort = sp.sort === 'name' ? 'name' : 'latest';
   const view: VendorView = sp.view === 'list' ? 'list' : 'card';
 
-  const vendors = await prisma.vendor.findMany({
-    where: {
-      ...(activeCategory ? { category: activeCategory } : {}),
-      ...(activeSido
-        ? { region: activeGugun ? joinRegion(activeSido, activeGugun) : { startsWith: activeSido } }
-        : {}),
-    },
-    orderBy: sort === 'name' ? { name: 'asc' } : { createdAt: 'desc' },
-    select: {
-      id: true,
-      name: true,
-      category: true,
-      region: true,
-      contact: true,
-      photos: true,
-      createdAt: true,
-    },
-  });
+  const regionWhere = activeSido
+    ? { region: activeGugun ? joinRegion(activeSido, activeGugun) : { startsWith: activeSido } }
+    : {};
+
+  // 업체 목록과 업종별 개수(현재 지역 필터 기준)를 함께 조회
+  const [vendors, categoryCounts] = await Promise.all([
+    prisma.vendor.findMany({
+      where: {
+        ...(activeCategory ? { category: activeCategory } : {}),
+        ...regionWhere,
+      },
+      orderBy: sort === 'name' ? { name: 'asc' } : { createdAt: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        category: true,
+        region: true,
+        contact: true,
+        photos: true,
+        createdAt: true,
+      },
+    }),
+    prisma.vendor.groupBy({
+      by: ['category'],
+      _count: { _all: true },
+      where: regionWhere,
+    }),
+  ]);
+
+  const countByCategory = new Map(categoryCounts.map((c) => [c.category, c._count._all]));
+  const totalCount = categoryCounts.reduce((sum, c) => sum + c._count._all, 0);
 
   const filters = [{ code: '', label: '전체' }, ...CATEGORIES];
 
@@ -96,6 +109,7 @@ export default async function VendorsPage({
         <div className="mb-3 flex flex-wrap gap-2">
           {filters.map((f) => {
             const isActive = (f.code || undefined) === activeCategory;
+            const count = f.code ? (countByCategory.get(f.code) ?? 0) : totalCount;
             return (
               <Link
                 key={f.code || 'all'}
@@ -107,6 +121,7 @@ export default async function VendorsPage({
                 }`}
               >
                 {f.label}
+                <span className="ml-1 text-xs tabular-nums text-neutral-400">{count}</span>
               </Link>
             );
           })}
