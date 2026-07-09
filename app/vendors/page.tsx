@@ -32,9 +32,10 @@ function formatDate(date: Date): string {
 export default async function VendorsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ category?: string; sido?: string; gugun?: string; sort?: string; view?: string }>;
+  searchParams: Promise<{ q?: string; category?: string; sido?: string; gugun?: string; sort?: string; view?: string }>;
 }) {
   const sp = await searchParams;
+  const q = (sp.q ?? '').trim().slice(0, 100);
   const activeCategory = CATEGORIES.some((c) => c.code === sp.category) ? sp.category : undefined;
   const activeSido = SIDO_LIST.includes(sp.sido ?? '') ? sp.sido! : '';
   const activeGugun = activeSido && gugunsOf(activeSido).includes(sp.gugun ?? '') ? sp.gugun! : '';
@@ -45,12 +46,25 @@ export default async function VendorsPage({
     ? { region: activeGugun ? joinRegion(activeSido, activeGugun) : { startsWith: activeSido } }
     : {};
 
-  // 업체 목록과 업종별 개수(현재 지역 필터 기준)를 함께 조회
+  // 검색어: 업체명·연락처·주소·지역 중 아무 곳이나 포함되면 매칭
+  const searchWhere = q
+    ? {
+        OR: [
+          { name: { contains: q, mode: 'insensitive' as const } },
+          { contact: { contains: q } },
+          { address: { contains: q, mode: 'insensitive' as const } },
+          { region: { contains: q } },
+        ],
+      }
+    : {};
+
+  // 업체 목록과 업종별 개수(현재 지역/검색 필터 기준)를 함께 조회
   const [vendors, categoryCounts] = await Promise.all([
     prisma.vendor.findMany({
       where: {
         ...(activeCategory ? { category: activeCategory } : {}),
         ...regionWhere,
+        ...searchWhere,
       },
       orderBy: sort === 'name' ? { name: 'asc' } : { createdAt: 'desc' },
       select: {
@@ -66,7 +80,7 @@ export default async function VendorsPage({
     prisma.vendor.groupBy({
       by: ['category'],
       _count: { _all: true },
-      where: regionWhere,
+      where: { ...regionWhere, ...searchWhere },
     }),
   ]);
 
@@ -75,9 +89,10 @@ export default async function VendorsPage({
 
   const filters = [{ code: '', label: '전체' }, ...CATEGORIES];
 
-  // 업종 칩 링크 — 지역/정렬/보기 상태를 유지한 채 업종만 교체
+  // 업종 칩 링크 — 검색/지역/정렬/보기 상태를 유지한 채 업종만 교체
   function chipHref(code: string): string {
     const params = new URLSearchParams();
+    if (q) params.set('q', q);
     if (code) params.set('category', code);
     if (activeSido) params.set('sido', activeSido);
     if (activeGugun) params.set('gugun', activeGugun);
@@ -88,6 +103,7 @@ export default async function VendorsPage({
   }
 
   const filterDesc = [
+    q ? `"${q}" 검색` : '',
     activeSido ? joinRegion(activeSido, activeGugun) : '',
     activeCategory ? categoryLabel(activeCategory) : '',
   ]
@@ -127,8 +143,9 @@ export default async function VendorsPage({
           })}
         </div>
 
-        {/* 지역 필터 · 정렬 · 보기 전환 */}
+        {/* 검색 · 지역 필터 · 정렬 · 보기 전환 */}
         <VendorListControls
+          q={q}
           category={activeCategory}
           sido={activeSido}
           gugun={activeGugun}
