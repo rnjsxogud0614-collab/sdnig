@@ -24,7 +24,7 @@ export default function LoginPage() {
         body: JSON.stringify({ password }),
       });
       if (res.ok) {
-        router.push('/vendors');
+        router.push('/');
         router.refresh();
         return;
       }
