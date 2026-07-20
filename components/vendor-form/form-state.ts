@@ -6,8 +6,12 @@ import type { CategoryCode, PhotoType, VendorPhoto } from '@/lib/constants';
 import { joinRegion, splitRegion } from '@/lib/regions';
 
 export interface ProductRow {
+  /** 클라이언트 전용 안정적 식별자 (서버로 전송하지 않음) — 사진 업로드가 진행 중일 때
+   * 배열 인덱스만으로 행을 찾으면 다른 행이 추가/삭제된 사이 엉뚱한 행을 덮어쓸 수 있어 도입 */
+  id: string;
   name: string;
   description: string;
+  photos: string[]; // 상품사진 (선택, 여러 장 가능)
 }
 
 export interface OptionRow {
@@ -57,7 +61,7 @@ export interface VendorPayloadInput {
   businessHoursEnd: string;
   region: string;
   address: string;
-  products: { name: string; description: string }[];
+  products: { name: string; description: string; photos: string[] }[];
   styleMoods: string[];
   options: { name: string; price: number | null; desc: string }[];
   description: string;
@@ -85,7 +89,9 @@ export interface VendorDTO {
   photos: unknown;
 }
 
-export const EMPTY_PRODUCT: ProductRow = { name: '', description: '' };
+export function emptyProduct(): ProductRow {
+  return { id: crypto.randomUUID(), name: '', description: '', photos: [] };
+}
 export const EMPTY_OPTION: OptionRow = { name: '', price: '', desc: '' };
 
 export function emptyRepeatRow(field: Extract<CategoryField, { type: 'repeat_list' }>): RepeatRow {
@@ -137,7 +143,7 @@ export function initialFormState(): VendorFormState {
     regionSido: '',
     regionGugun: '',
     address: '',
-    products: [{ ...EMPTY_PRODUCT }],
+    products: [emptyProduct()],
     styleMoods: [],
     options: [],
     description: '',
@@ -307,8 +313,8 @@ export function serializeForm(state: VendorFormState): VendorPayloadInput {
     region: joinRegion(state.regionSido, state.regionGugun),
     address: state.address.trim(),
     products: state.products
-      .map((p) => ({ name: p.name.trim(), description: p.description.trim() }))
-      .filter((p) => p.name || p.description),
+      .map((p) => ({ name: p.name.trim(), description: p.description.trim(), photos: p.photos }))
+      .filter((p) => p.name || p.description || p.photos.length > 0),
     styleMoods: state.styleMoods,
     options: state.options
       .map((o) => ({ name: o.name.trim(), price: toNumber(o.price) ?? null, desc: o.desc.trim() }))
@@ -340,8 +346,13 @@ export function formStateFromVendor(vendor: VendorDTO): VendorFormState {
   const products = Array.isArray(vendor.products) ? (vendor.products as unknown[]) : [];
   state.products = products
     .filter((p): p is Record<string, unknown> => !!p && typeof p === 'object')
-    .map((p) => ({ name: asString(p.name), description: asString(p.description) }));
-  if (state.products.length === 0) state.products = [{ ...EMPTY_PRODUCT }];
+    .map((p) => ({
+      id: crypto.randomUUID(),
+      name: asString(p.name),
+      description: asString(p.description),
+      photos: Array.isArray(p.photos) ? p.photos.filter((u): u is string => typeof u === 'string') : [],
+    }));
+  if (state.products.length === 0) state.products = [emptyProduct()];
 
   const options = Array.isArray(vendor.options) ? (vendor.options as unknown[]) : [];
   state.options = options

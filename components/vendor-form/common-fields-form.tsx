@@ -8,14 +8,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { CATEGORIES } from '@/lib/constants';
 import { SIDO_LIST, gugunsOf } from '@/lib/regions';
 import { AddressSearchButton } from './address-search';
-import { EMPTY_OPTION, EMPTY_PRODUCT, type VendorFormState } from './form-state';
+import { EMPTY_OPTION, emptyProduct, type ProductRow, type VendorFormState } from './form-state';
 import { NativeSelect } from './native-select';
+import { ProductPhotosField } from './photo-uploader';
 import { TagInput } from './tag-input';
 import { TimeRangeSelect } from './time-select';
 
 interface CommonFieldsFormProps {
   state: VendorFormState;
-  patch: (partial: Partial<VendorFormState>) => void;
+  patch: (partial: Partial<VendorFormState> | ((prev: VendorFormState) => Partial<VendorFormState>)) => void;
   isEdit: boolean;
 }
 
@@ -117,55 +118,73 @@ export function CommonFieldsForm({ state, patch, isEdit }: CommonFieldsFormProps
         </div>
       </Field>
 
-      <Field label="상품구성" required hint="상품명 + 설명을 +/− 버튼으로 여러 개 등록할 수 있습니다.">
+      <Field
+        label="상품구성"
+        required
+        hint="상품명 + 설명을 +/− 버튼으로 여러 개 등록할 수 있습니다. 상품사진은 선택사항이며 상품마다 여러 장 추가할 수 있습니다. (상품명은 각 상품마다 필수입니다)"
+      >
         <div className="space-y-2">
-          {state.products.map((product, i) => (
-            <div key={i} className="flex flex-wrap items-center gap-2 rounded-md border bg-neutral-50/50 p-2">
-              <Input
-                value={product.name}
-                onChange={(e) => {
-                  const next = [...state.products];
-                  next[i] = { ...next[i], name: e.target.value };
-                  patch({ products: next });
-                }}
-                placeholder="상품명"
-                className="w-56"
-              />
-              <Input
-                value={product.description}
-                onChange={(e) => {
-                  const next = [...state.products];
-                  next[i] = { ...next[i], description: e.target.value };
-                  patch({ products: next });
-                }}
-                placeholder="설명"
-                className="min-w-40 flex-1"
-              />
-              <div className="ml-auto flex items-center gap-1">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => patch({ products: state.products.filter((_, idx) => idx !== i) })}
-                  disabled={state.products.length === 1}
-                  title="삭제"
-                >
-                  −
-                </Button>
-                {i === state.products.length - 1 && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => patch({ products: [...state.products, { ...EMPTY_PRODUCT }] })}
-                    title="상품 추가"
-                  >
-                    ＋
-                  </Button>
-                )}
+          {state.products.map((product, i) => {
+            // id 기준으로 갱신 — 사진 업로드처럼 시간이 걸리는 작업이 끝났을 때는 그 사이
+            // 다른 행이 추가/삭제됐을 수 있으므로, 배열 인덱스가 아니라 최신 state(prev)에서
+            // 같은 id를 다시 찾아 갱신해야 엉뚱한 행을 덮어쓰지 않는다.
+            const updateProduct = (changes: Partial<ProductRow>) =>
+              patch((prev) => ({
+                products: prev.products.map((p) => (p.id === product.id ? { ...p, ...changes } : p)),
+              }));
+            // 사진은 배열 자체를 통째로 교체하지 않고, 적용 시점의 최신 photos(prev)에
+            // updater를 적용 — 업로드 진행 중 다른 사진을 지워도 되살아나지 않는다.
+            const updateProductPhotos = (updater: (prev: string[]) => string[]) =>
+              patch((prev) => ({
+                products: prev.products.map((p) =>
+                  p.id === product.id ? { ...p, photos: updater(p.photos) } : p
+                ),
+              }));
+            return (
+              <div key={product.id} className="space-y-2 rounded-md border bg-neutral-50/50 p-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    value={product.name}
+                    onChange={(e) => updateProduct({ name: e.target.value })}
+                    placeholder="상품명"
+                    className="w-56"
+                  />
+                  <Input
+                    value={product.description}
+                    onChange={(e) => updateProduct({ description: e.target.value })}
+                    placeholder="설명"
+                    className="min-w-40 flex-1"
+                  />
+                  <div className="ml-auto flex items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        patch((prev) => ({ products: prev.products.filter((p) => p.id !== product.id) }))
+                      }
+                      disabled={state.products.length === 1}
+                      title="삭제"
+                    >
+                      −
+                    </Button>
+                    {i === state.products.length - 1 && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => patch((prev) => ({ products: [...prev.products, emptyProduct()] }))}
+                        title="상품 추가"
+                      >
+                        ＋
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                <ProductPhotosField photos={product.photos} onUpdate={updateProductPhotos} />
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </Field>
 

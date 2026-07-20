@@ -49,7 +49,10 @@ export function VendorForm({ vendor }: VendorFormProps) {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const patch = (partial: Partial<VendorFormState>) => setState((prev) => ({ ...prev, ...partial }));
+  // 함수 형태도 허용 — 비동기 작업(사진 업로드 등)이 끝난 시점의 최신 state를 기준으로
+  // 갱신해야 그 사이에 있었던 다른 변경(행 추가/삭제, 다른 필드 입력)을 덮어쓰지 않는다.
+  const patch = (partial: Partial<VendorFormState> | ((prev: VendorFormState) => Partial<VendorFormState>)) =>
+    setState((prev) => ({ ...prev, ...(typeof partial === 'function' ? partial(prev) : partial) }));
 
   const category = state.category as CategoryCode | '';
   const categoryData = useMemo(() => {

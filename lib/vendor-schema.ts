@@ -17,6 +17,7 @@ export const photoSchema = z.object({
 export const productSchema = z.object({
   name: z.string().trim().min(1, '상품명을 입력해주세요'),
   description: z.string().trim().default(''),
+  photos: z.array(z.string().min(1)).default([]),
 });
 
 export const optionSchema = z.object({

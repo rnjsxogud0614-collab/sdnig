@@ -22,9 +22,12 @@ interface DropzoneProps {
   onUploaded: (urls: string[]) => void;
   children?: React.ReactNode;
   className?: string;
+  ariaLabel?: string;
+  /** 작은 정사각형 타일용 — 기본 padding(p-6) 대신 여백 없이 채움 */
+  compact?: boolean;
 }
 
-function Dropzone({ multiple, onUploaded, children, className }: DropzoneProps) {
+function Dropzone({ multiple, onUploaded, children, className, ariaLabel, compact }: DropzoneProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -52,6 +55,7 @@ function Dropzone({ multiple, onUploaded, children, className }: DropzoneProps) 
     <div
       role="button"
       tabIndex={0}
+      aria-label={ariaLabel}
       onClick={() => inputRef.current?.click()}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click();
@@ -66,9 +70,9 @@ function Dropzone({ multiple, onUploaded, children, className }: DropzoneProps) 
         setDragOver(false);
         handleFiles(e.dataTransfer.files);
       }}
-      className={`flex cursor-pointer items-center justify-center rounded-lg border-2 border-dashed p-6 text-center text-sm transition-colors ${
-        dragOver ? 'border-neutral-900 bg-neutral-100' : 'border-neutral-300 bg-white hover:bg-neutral-50'
-      } ${className ?? ''}`}
+      className={`flex cursor-pointer items-center justify-center rounded-lg border-2 border-dashed text-center text-sm transition-colors ${
+        compact ? 'p-1' : 'p-6'
+      } ${dragOver ? 'border-neutral-900 bg-neutral-100' : 'border-neutral-300 bg-white hover:bg-neutral-50'} ${className ?? ''}`}
     >
       <input
         ref={inputRef}
@@ -82,7 +86,7 @@ function Dropzone({ multiple, onUploaded, children, className }: DropzoneProps) 
         }}
       />
       {uploading ? (
-        <span className="text-muted-foreground">업로드 중...</span>
+        <span className="text-muted-foreground">{compact ? '···' : '업로드 중...'}</span>
       ) : (
         (children ?? <span className="text-muted-foreground">클릭 또는 드래그하여 사진 업로드</span>)
       )}
@@ -117,6 +121,46 @@ export function MainPhotoField({ value, onChange }: MainPhotoFieldProps) {
       ) : null}
       <Dropzone multiple={false} onUploaded={(urls) => onChange(urls[0])} className="h-40 w-40">
         <span className="text-muted-foreground">{value ? '사진 교체' : '대표사진 업로드 (필수)'}</span>
+      </Dropzone>
+    </div>
+  );
+}
+
+// ---- 상품사진 (선택, 상품별로 여러 장) ----
+interface ProductPhotosFieldProps {
+  photos: string[];
+  /** 항상 최신 상태(prev) 기준으로 갱신 — 업로드가 느릴 때 그 사이 다른 삭제/추가로
+   * 바뀐 사진 배열을 업로드 시작 시점의 낡은 배열로 덮어쓰는 것을 방지 (PhotoListField와 동일 패턴) */
+  onUpdate: (updater: (prev: string[]) => string[]) => void;
+}
+
+export function ProductPhotosField({ photos, onUpdate }: ProductPhotosFieldProps) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {photos.map((url, i) => (
+        <div key={`${url}-${i}`} className="relative h-14 w-14 shrink-0">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={url} alt={`상품사진 ${i + 1}`} className="h-full w-full rounded-md border object-cover" />
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            className="absolute -right-1.5 -top-1.5 h-5 w-5 rounded-full p-0"
+            onClick={() => onUpdate((prev) => prev.filter((_, idx) => idx !== i))}
+            title="상품사진 삭제"
+          >
+            ✕
+          </Button>
+        </div>
+      ))}
+      <Dropzone
+        multiple
+        compact
+        ariaLabel="상품사진 추가"
+        onUploaded={(urls) => onUpdate((prev) => [...prev, ...urls])}
+        className="h-14 w-14 shrink-0"
+      >
+        <span className="text-lg leading-none text-muted-foreground">＋</span>
       </Dropzone>
     </div>
   );
